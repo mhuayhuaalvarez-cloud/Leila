@@ -1,0 +1,84 @@
+<!DOCTYPE html> 
+<html lang="es"><head><meta charset="utf-8"> 
+<meta name="viewport" content="width=device-width, initial-scale=1"> 
+<title>Leila</title> 
+<style> 
+body{font-family:sans-serif;background:#0f172a;color:#e2e8f0;text
+align:center;padding:24px} 
+#mic{font-size:22px;border:0;border
+radius:50%;width:150px;height:150px;background:#6366f1;color:#fff} 
+#estado,#resp{margin-top:20px;font-size:18px} 
+textarea{width:90%;height:80px;margin-top:16px;font-size:16px} 
+#enviar{font-size:18px;padding:10px 24px;border:0;border
+radius:12px;background:#334155;color:#fff;margin-top:8px} 
+a{color:#94a3b8;font-size:14px} 
+</style></head> 
+<body> 
+<h1>Leila</h1> 
+<button id="mic">        <br>Hablar</button> 
+<div id="estado">Toca y habla</div> 
+<textarea id="txt" placeholder="También puedes escribir aquí"></textarea><br> 
+<button id="enviar">Enviar</button> 
+<div id="resp"></div> 
+<p><a href="#" id="cfg">Configurar</a></p> 
+<script> 
+var LANG = 'es-PE'; 
+var $ = function (id) { return document.getElementById(id); }; 
+function conf() { 
+var u = localStorage.getItem('leila_url'), t = localStorage.getItem('leila_token'); 
+if (!u || !t) { 
+u = prompt('Pega la URL de la aplicación web (termina en /exec):'); 
+t = prompt('Pega tu token secreto:'); 
+if (u && t) { localStorage.setItem('leila_url', u.trim()); 
+localStorage.setItem('leila_token', t.trim()); } 
+} 
+return { u: localStorage.getItem('leila_url'), t: localStorage.getItem('leila_token') }; 
+} 
+$('cfg').onclick = function (e) { 
+e.preventDefault(); 
+localStorage.removeItem('leila_url'); localStorage.removeItem('leila_token'); 
+conf(); 
+}; 
+function hablar(t) { 
+try { var u = new SpeechSynthesisUtterance(t); u.lang = LANG; 
+speechSynthesis.speak(u); } catch (e) {} 
+} 
+function enviar(texto) { 
+var c = conf(); 
+if (!c.u || !c.t) { $('estado').textContent = 'Falta configurar'; return; } 
+if (!texto.trim()) return; 
+$('estado').textContent = 'Enviando…'; 
+fetch(c.u, { 
+method: 'POST', 
+headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+body: JSON.stringify({ 
+token: c.t, client_id: 'cliente_001', 
+request_id: 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8), 
+source: 'voice', text: texto 
+}) 
+}) 
+.then(function (r) { return r.json(); }) 
+.then(function (j) { 
+$('estado').textContent = 'Listo'; 
+$('resp').textContent = j.spoken || JSON.stringify(j); 
+hablar(j.spoken || ''); 
+$('txt').value = ''; 
+}) 
+.catch(function (e) { $('estado').textContent = 'Error: ' + e; }); 
+} 
+var SR = window.SpeechRecognition || window.webkitSpeechRecognition; 
+$('mic').onclick = function () { 
+if (!SR) { $('estado').textContent = 'Este navegador no soporta dictado. Usa 
+Chrome.'; return; } 
+var rec = new SR(); 
+rec.lang = LANG; rec.interimResults = false; rec.continuous = false; 
+$('estado').textContent = 'Escuchando…'; 
+rec.onresult = function (ev) { var t = ev.results[0][0].transcript; $('txt').value = t; 
+enviar(t); }; 
+rec.onerror = function (ev) { $('estado').textContent = 'Error de micrófono: ' + 
+ev.error; }; 
+rec.start(); 
+}; 
+$('enviar').onclick = function () { enviar($('txt').value); }; 
+</script> 
+</body></html>
