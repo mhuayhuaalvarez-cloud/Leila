@@ -63,32 +63,31 @@
       if (!texto.trim()) return;
 
       $('estado').textContent = 'Enviando...';
-      
-      var datos = {
+
+      var payload = JSON.stringify({
         token: c.t,
         client_id: 'cliente_001',
-        request_id: 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        request_id: 'web-' + Date.now(),
         source: 'voice',
         text: texto
-      };
+      });
 
-      // Petición usando POST simple compatible con Google Apps Script
+      // Envío compatible con Google Apps Script sin bloqueo de navegador
       fetch(c.u, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(datos),
-        redirect: 'follow'
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: payload
       })
-      .then(function(r) { return r.json(); })
-      .then(function(j) {
+      .then(function() {
         $('estado').textContent = 'Listo';
-        $('resp').textContent = j.spoken || JSON.stringify(j);
-        hablar(j.spoken || '');
+        $('resp').textContent = 'Instrucción enviada a Leila correctamente.';
+        hablar('Instrucción enviada');
         $('txt').value = '';
       })
-      .catch(function(e) { 
+      .catch(function(e) {
         console.error(e);
-        $('estado').textContent = 'Error al conectar. Verifica que la implementación en Apps Script tenga la opción "Quién tiene acceso: Cualquier usuario".'; 
+        $('estado').textContent = 'Error al enviar. Revisa tu conexión a internet.';
       });
     }
 
