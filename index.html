@@ -64,19 +64,20 @@
 
       $('estado').textContent = 'Enviando...';
       
-      var payload = JSON.stringify({
+      var datos = {
         token: c.t,
         client_id: 'cliente_001',
         request_id: 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
         source: 'voice',
         text: texto
-      });
+      };
 
-      // Se usa text/plain sin cabeceras restrictivas para evitar bloqueo por CORS en Apps Script
+      // Petición usando POST simple compatible con Google Apps Script
       fetch(c.u, {
         method: 'POST',
-        mode: 'cors',
-        body: payload
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(datos),
+        redirect: 'follow'
       })
       .then(function(r) { return r.json(); })
       .then(function(j) {
@@ -87,7 +88,7 @@
       })
       .catch(function(e) { 
         console.error(e);
-        $('estado').textContent = 'Error de conexión. Vuelve a hacer clic en "Configurar URL / Token" y asegúrate de pegar la URL completa sin espacios.'; 
+        $('estado').textContent = 'Error al conectar. Verifica que la implementación en Apps Script tenga la opción "Quién tiene acceso: Cualquier usuario".'; 
       });
     }
 
