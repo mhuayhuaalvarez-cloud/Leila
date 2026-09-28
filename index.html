@@ -6,7 +6,7 @@
   <title>Leila</title>
   <style>
     body { font-family: sans-serif; background: #0f172a; color: #e2e8f0; text-align: center; padding: 24px; }
-    #mic { font-size: 22px; border: 0; border-radius: 50%; width: 150px; height: 150px; background: #6366f1; color: #fff; cursor: pointer; }
+    #mic { font-size: 22px; border: 0; border-radius: 50%; width: 140px; height: 140px; background: #6366f1; color: #fff; cursor: pointer; }
     #estado, #resp { margin-top: 20px; font-size: 18px; }
     textarea { width: 90%; height: 80px; margin-top: 16px; font-size: 16px; border-radius: 8px; padding: 8px; }
     #enviar { font-size: 18px; padding: 10px 24px; border: 0; border-radius: 12px; background: #334155; color: #fff; margin-top: 8px; cursor: pointer; }
@@ -33,8 +33,10 @@
         u = prompt('Pega la URL de la aplicación web (termina en /exec):');
         t = prompt('Pega tu token secreto:');
         if (u && t) {
-          localStorage.setItem('leila_url', u.trim());
-          localStorage.setItem('leila_token', t.trim());
+          u = u.trim();
+          t = t.trim();
+          localStorage.setItem('leila_url', u);
+          localStorage.setItem('leila_token', t);
         }
       }
       return { u: localStorage.getItem('leila_url'), t: localStorage.getItem('leila_token') };
@@ -61,16 +63,20 @@
       if (!texto.trim()) return;
 
       $('estado').textContent = 'Enviando...';
+      
+      var payload = JSON.stringify({
+        token: c.t,
+        client_id: 'cliente_001',
+        request_id: 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        source: 'voice',
+        text: texto
+      });
+
+      // Se usa text/plain sin cabeceras restrictivas para evitar bloqueo por CORS en Apps Script
       fetch(c.u, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-        body: JSON.stringify({
-          token: c.t,
-          client_id: 'cliente_001',
-          request_id: 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-          source: 'voice',
-          text: texto
-        })
+        mode: 'cors',
+        body: payload
       })
       .then(function(r) { return r.json(); })
       .then(function(j) {
@@ -79,7 +85,10 @@
         hablar(j.spoken || '');
         $('txt').value = '';
       })
-      .catch(function(e) { $('estado').textContent = 'Error: ' + e; });
+      .catch(function(e) { 
+        console.error(e);
+        $('estado').textContent = 'Error de conexión. Vuelve a hacer clic en "Configurar URL / Token" y asegúrate de pegar la URL completa sin espacios.'; 
+      });
     }
 
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
