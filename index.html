@@ -27,8 +27,8 @@ var $ = function (id) { return document.getElementById(id); };
 function conf() { 
 var u = localStorage.getItem('leila_url'), t = localStorage.getItem('leila_token'); 
 if (!u || !t) { 
-u = prompt('Pega la URL de la aplicación web (termina en /exec):'); 
-t = prompt('Pega tu token secreto:'); 
+u = prompt('https://script.google.com/macros/s/AKfycbxGXcVlhNuioFk2X8LJZCT7bX4oSJnSuFZ8OdaWqznKLBSUjsA2H1z93ESB70sBbeES/exec'); 
+t = prompt('AQ.Ab8RN6IXt8aYX1kWD4RVHAv0ZUKlt93ecXp9mRAJIhZQtS76iw'); 
 if (u && t) { localStorage.setItem('leila_url', u.trim()); 
 localStorage.setItem('leila_token', t.trim()); } 
 } 
