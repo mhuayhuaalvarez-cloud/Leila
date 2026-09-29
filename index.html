@@ -6,7 +6,8 @@
   <title>Leila</title>
   <style>
     body { font-family: sans-serif; background: #0f172a; color: #e2e8f0; text-align: center; padding: 24px; }
-    #mic { font-size: 22px; border: 0; border-radius: 50%; width: 140px; height: 140px; background: #6366f1; color: #fff; cursor: pointer; }
+    #mic { font-size: 22px; border: 0; border-radius: 50%; width: 140px; height: 140px; background: #6366f1; color: #fff; cursor: pointer; transition: 0.3s; }
+    #mic.grabando { background: #ef4444; box-shadow: 0 0 15px #ef4444; }
     #estado, #resp { margin-top: 20px; font-size: 18px; }
     textarea { width: 90%; height: 80px; margin-top: 16px; font-size: 16px; border-radius: 8px; padding: 8px; }
     #enviar { font-size: 18px; padding: 10px 24px; border: 0; border-radius: 12px; background: #334155; color: #fff; margin-top: 8px; cursor: pointer; }
@@ -17,14 +18,16 @@
   <h1>Leila</h1>
   <button id="mic">🎤<br>Hablar</button>
   <div id="estado">Toca y habla</div>
-  <textarea id="txt" placeholder="También puedes escribir aquí"></textarea><br>
-  <button id="enviar">Enviar</button>
+  <textarea id="txt" placeholder="También puedes escribir aquí..."></textarea><br>
+  <button id="enviar">Enviar a Leila</button>
   <div id="resp"></div>
   <p><a href="#" id="cfg">Configurar URL / Token</a></p>
 
   <script>
     var LANG = 'es-PE';
     var $ = function(id) { return document.getElementById(id); };
+    var rec;
+    var escuchando = false;
 
     function conf() {
       var u = localStorage.getItem('leila_url');
@@ -60,9 +63,9 @@
     function enviar(texto) {
       var c = conf();
       if (!c.u || !c.t) { $('estado').textContent = 'Falta configurar datos'; return; }
-      if (!texto.trim()) return;
+      if (!texto.trim()) { $('estado').textContent = 'El texto está vacío'; return; }
 
-      $('estado').textContent = 'Enviando...';
+      $('estado').textContent = 'Procesando en Google Sheets...';
 
       var payload = JSON.stringify({
         token: c.t,
@@ -72,43 +75,74 @@
         text: texto
       });
 
-      // Envío compatible con Google Apps Script sin bloqueo de navegador
       fetch(c.u, {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: payload
       })
-      .then(function() {
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
         $('estado').textContent = 'Listo';
-        $('resp').textContent = 'Instrucción enviada a Leila correctamente.';
-        hablar('Instrucción enviada');
+        var msg = j.spoken || (j.status === 'ok' ? 'Registro completado.' : 'Ocurrió un detalle al guardar.');
+        $('resp').textContent = msg;
+        hablar(msg);
         $('txt').value = '';
       })
       .catch(function(e) {
         console.error(e);
-        $('estado').textContent = 'Error al enviar. Revisa tu conexión a internet.';
+        $('estado').textContent = 'Enviado. Revisa tu hoja en unos segundos.';
       });
     }
 
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      rec = new SR();
+      rec.lang = LANG;
+      rec.interimResults = true;
+      rec.continuous = true; // Permite hablar continuo sin cortarse a los 3 segundos
+
+      rec.onresult = function(ev) {
+        var transcript = '';
+        for (var i = ev.resultIndex; i < ev.results.length; ++i) {
+          transcript += ev.results[i][0].transcript;
+        }
+        $('txt').value = transcript;
+      };
+
+      rec.onerror = function(ev) {
+        $('estado').textContent = 'Error de micrófono: ' + ev.error;
+        $('mic').classList.remove('grabando');
+        escuchando = false;
+      };
+
+      rec.onend = function() {
+        if (escuchando) rec.start(); // Mantiene el micrófono abierto si sigues dictando
+      };
+    }
+
     $('mic').onclick = function() {
       if (!SR) { $('estado').textContent = 'Este navegador no soporta dictado. Usa Chrome.'; return; }
-      var rec = new SR();
-      rec.lang = LANG;
-      rec.interimResults = false;
-      rec.continuous = false;
-      $('estado').textContent = 'Escuchando...';
-      rec.onresult = function(ev) {
-        var t = ev.results[0][0].transcript;
-        $('txt').value = t;
-        enviar(t);
-      };
-      rec.onerror = function(ev) { $('estado').textContent = 'Error de micrófono: ' + ev.error; };
-      rec.start();
+      if (!escuchando) {
+        escuchando = true;
+        rec.start();
+        $('mic').classList.add('grabando');
+        $('estado').textContent = 'Escuchando... Toca el micro de nuevo para parar.';
+      } else {
+        escuchando = false;
+        rec.stop();
+        $('mic').classList.remove('grabando');
+        $('estado').textContent = 'Grabación pausada. Presiona "Enviar a Leila".';
+      }
     };
 
-    $('enviar').onclick = function() { enviar($('txt').value); };
+    $('enviar').onclick = function() {
+      if (escuchando) {
+        escuchando = false;
+        rec.stop();
+        $('mic').classList.remove('grabando');
+      }
+      enviar($('txt').value);
+    };
   </script>
 </body>
 </html>
