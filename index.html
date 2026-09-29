@@ -4,145 +4,837 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Leila</title>
+
   <style>
-    body { font-family: sans-serif; background: #0f172a; color: #e2e8f0; text-align: center; padding: 24px; }
-    #mic { font-size: 22px; border: 0; border-radius: 50%; width: 140px; height: 140px; background: #6366f1; color: #fff; cursor: pointer; transition: 0.3s; }
-    #mic.grabando { background: #ef4444; box-shadow: 0 0 15px #ef4444; }
-    #estado, #resp { margin-top: 20px; font-size: 18px; }
-    textarea { width: 90%; height: 80px; margin-top: 16px; font-size: 16px; border-radius: 8px; padding: 8px; }
-    #enviar { font-size: 18px; padding: 10px 24px; border: 0; border-radius: 12px; background: #334155; color: #fff; margin-top: 8px; cursor: pointer; }
-    a { color: #94a3b8; font-size: 14px; text-decoration: none; }
+    body {
+      font-family: sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      text-align: center;
+      padding: 24px;
+    }
+
+    #mic {
+      font-size: 22px;
+      border: 0;
+      border-radius: 50%;
+      width: 140px;
+      height: 140px;
+      background: #6366f1;
+      color: #fff;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    #mic.grabando {
+      background: #ef4444;
+      box-shadow: 0 0 20px #ef4444;
+    }
+
+    #estado,
+    #resp {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+
+    textarea {
+      width: 90%;
+      height: 100px;
+      margin-top: 16px;
+      font-size: 16px;
+      border-radius: 8px;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+
+    #enviar {
+      font-size: 18px;
+      padding: 10px 24px;
+      border: 0;
+      border-radius: 12px;
+      background: #334155;
+      color: #fff;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+
+    #enviar:hover {
+      background: #475569;
+    }
+
+    a {
+      color: #94a3b8;
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    #resp {
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
+    }
   </style>
 </head>
+
 <body>
+
   <h1>Leila</h1>
+
   <button id="mic">🎤<br>Hablar</button>
+
   <div id="estado">Toca y habla</div>
-  <textarea id="txt" placeholder="También puedes escribir aquí..."></textarea><br>
+
+  <textarea
+    id="txt"
+    placeholder="También puedes escribir aquí..."
+  ></textarea>
+
+  <br>
+
   <button id="enviar">Enviar a Leila</button>
+
   <div id="resp"></div>
-  <p><a href="#" id="cfg">Configurar URL / Token</a></p>
 
-  <script>
-    var LANG = 'es-PE';
-    var $ = function(id) { return document.getElementById(id); };
-    var rec;
-    var escuchando = false;
+  <p>
+    <a href="#" id="cfg">Configurar URL / Token</a>
+  </p>
 
-    function conf() {
-      var u = localStorage.getItem('leila_url');
-      var t = localStorage.getItem('leila_token');
-      if (!u || !t) {
-        u = prompt('Pega la URL de la aplicación web (termina en /exec):');
-        t = prompt('Pega tu token secreto:');
-        if (u && t) {
-          u = u.trim();
-          t = t.trim();
-          localStorage.setItem('leila_url', u);
-          localStorage.setItem('leila_token', t);
-        }
+
+<script>
+
+  /* =========================================================
+     CONFIGURACIÓN
+     ========================================================= */
+
+  var LANG = 'es-PE';
+
+  var $ = function(id) {
+    return document.getElementById(id);
+  };
+
+
+  /* =========================================================
+     VARIABLES DEL RECONOCIMIENTO DE VOZ
+     ========================================================= */
+
+  var rec = null;
+
+  var escuchando = false;
+
+  var reconocimientoActivo = false;
+
+  var reinicioProgramado = false;
+
+  var textoFinal = '';
+
+  var textoIntermedio = '';
+
+
+  /* =========================================================
+     CONFIGURACIÓN URL / TOKEN
+     ========================================================= */
+
+  function conf() {
+
+    var u = localStorage.getItem('leila_url');
+    var t = localStorage.getItem('leila_token');
+
+    if (!u || !t) {
+
+      u = prompt(
+        'Pega la URL de la aplicación web de Google Apps Script (termina en /exec):'
+      );
+
+      t = prompt(
+        'Pega tu token secreto:'
+      );
+
+      if (u && t) {
+
+        u = u.trim();
+        t = t.trim();
+
+        localStorage.setItem('leila_url', u);
+        localStorage.setItem('leila_token', t);
       }
-      return { u: localStorage.getItem('leila_url'), t: localStorage.getItem('leila_token') };
     }
 
-    $('cfg').onclick = function(e) {
-      e.preventDefault();
-      localStorage.removeItem('leila_url');
-      localStorage.removeItem('leila_token');
-      conf();
+    return {
+      u: localStorage.getItem('leila_url'),
+      t: localStorage.getItem('leila_token')
     };
+  }
 
-    function hablar(texto) {
+
+  /* =========================================================
+     CONFIGURACIÓN MANUAL
+     ========================================================= */
+
+  $('cfg').onclick = function(e) {
+
+    e.preventDefault();
+
+    localStorage.removeItem('leila_url');
+    localStorage.removeItem('leila_token');
+
+    conf();
+  };
+
+
+  /* =========================================================
+     VOZ DE RESPUESTA
+     ========================================================= */
+
+  function hablar(texto) {
+
+    try {
+
+      if (!texto) return;
+
+      speechSynthesis.cancel();
+
+      var u = new SpeechSynthesisUtterance(texto);
+
+      u.lang = LANG;
+
+      u.rate = 1;
+
+      u.pitch = 1;
+
+      speechSynthesis.speak(u);
+
+    } catch (e) {
+
+      console.error('Error de síntesis de voz:', e);
+
+    }
+  }
+
+
+  /* =========================================================
+     ACTUALIZAR TEXTAREA
+     ========================================================= */
+
+  function actualizarTexto() {
+
+    var texto = (
+      textoFinal +
+      (textoIntermedio ? ' ' + textoIntermedio : '')
+    ).trim();
+
+    $('txt').value = texto;
+  }
+
+
+  /* =========================================================
+     INICIAR RECONOCIMIENTO
+     ========================================================= */
+
+  function iniciarReconocimiento() {
+
+    if (!rec) return;
+
+    if (!escuchando) return;
+
+    if (reconocimientoActivo) return;
+
+    if (reinicioProgramado) return;
+
+    reinicioProgramado = true;
+
+    setTimeout(function() {
+
+      reinicioProgramado = false;
+
+      if (!escuchando) return;
+
+      if (reconocimientoActivo) return;
+
       try {
-        var u = new SpeechSynthesisUtterance(texto);
-        u.lang = LANG;
-        speechSynthesis.speak(u);
-      } catch (e) {}
-    }
 
-    function enviar(texto) {
-      var c = conf();
-      if (!c.u || !c.t) { $('estado').textContent = 'Falta configurar datos'; return; }
-      if (!texto.trim()) { $('estado').textContent = 'El texto está vacío'; return; }
-
-      $('estado').textContent = 'Procesando en Google Sheets...';
-
-      var payload = JSON.stringify({
-        token: c.t,
-        client_id: 'cliente_001',
-        request_id: 'web-' + Date.now(),
-        source: 'voice',
-        text: texto
-      });
-
-      fetch(c.u, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: payload
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(j) {
-        $('estado').textContent = 'Listo';
-        var msg = j.spoken || (j.status === 'ok' ? 'Registro completado.' : 'Ocurrió un detalle al guardar.');
-        $('resp').textContent = msg;
-        hablar(msg);
-        $('txt').value = '';
-      })
-      .catch(function(e) {
-        console.error(e);
-        $('estado').textContent = 'Enviado. Revisa tu hoja en unos segundos.';
-      });
-    }
-
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      rec = new SR();
-      rec.lang = LANG;
-      rec.interimResults = true;
-      rec.continuous = true; // Permite hablar continuo sin cortarse a los 3 segundos
-
-      rec.onresult = function(ev) {
-        var transcript = '';
-        for (var i = ev.resultIndex; i < ev.results.length; ++i) {
-          transcript += ev.results[i][0].transcript;
-        }
-        $('txt').value = transcript;
-      };
-
-      rec.onerror = function(ev) {
-        $('estado').textContent = 'Error de micrófono: ' + ev.error;
-        $('mic').classList.remove('grabando');
-        escuchando = false;
-      };
-
-      rec.onend = function() {
-        if (escuchando) rec.start(); // Mantiene el micrófono abierto si sigues dictando
-      };
-    }
-
-    $('mic').onclick = function() {
-      if (!SR) { $('estado').textContent = 'Este navegador no soporta dictado. Usa Chrome.'; return; }
-      if (!escuchando) {
-        escuchando = true;
         rec.start();
-        $('mic').classList.add('grabando');
-        $('estado').textContent = 'Escuchando... Toca el micro de nuevo para parar.';
+
+      } catch (e) {
+
+        console.log(
+          'No se pudo iniciar reconocimiento:',
+          e
+        );
+
+      }
+
+    }, 200);
+  }
+
+
+  /* =========================================================
+     RECONOCIMIENTO DE VOZ
+     ========================================================= */
+
+  var SR =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+
+  if (SR) {
+
+    rec = new SR();
+
+    rec.lang = LANG;
+
+    /*
+      IMPORTANTE:
+      true permite que el navegador entregue
+      resultados parciales mientras hablamos.
+    */
+    rec.interimResults = true;
+
+    /*
+      Chrome puede cortar internamente el reconocimiento.
+      Nosotros lo reiniciamos automáticamente.
+    */
+    rec.continuous = true;
+
+
+    /* -------------------------------------------------------
+       CUANDO EMPIEZA A ESCUCHAR
+       ------------------------------------------------------- */
+
+    rec.onstart = function() {
+
+      reconocimientoActivo = true;
+
+      $('mic').classList.add('grabando');
+
+      $('estado').textContent =
+        'Escuchando... habla con normalidad.';
+
+    };
+
+
+    /* -------------------------------------------------------
+       CUANDO RECIBE TEXTO
+       ------------------------------------------------------- */
+
+    rec.onresult = function(ev) {
+
+      var nuevoFinal = '';
+      var nuevoIntermedio = '';
+
+      /*
+        IMPORTANTE:
+
+        NO borramos textoFinal.
+
+        Solo procesamos los resultados que Chrome
+        nos acaba de entregar.
+      */
+
+      for (
+        var i = ev.resultIndex;
+        i < ev.results.length;
+        i++
+      ) {
+
+        var texto =
+          ev.results[i][0].transcript;
+
+        if (ev.results[i].isFinal) {
+
+          nuevoFinal += texto;
+
+        } else {
+
+          nuevoIntermedio += texto;
+
+        }
+      }
+
+
+      /*
+        Guardamos permanentemente lo confirmado.
+      */
+
+      if (nuevoFinal) {
+
+        textoFinal +=
+          (textoFinal ? ' ' : '') +
+          nuevoFinal.trim();
+
+      }
+
+
+      /*
+        Lo intermedio NO se guarda permanentemente.
+        Solo se muestra mientras Chrome está pensando.
+      */
+
+      textoIntermedio =
+        nuevoIntermedio.trim();
+
+
+      actualizarTexto();
+
+
+      console.log(
+        'Texto final:',
+        textoFinal
+      );
+
+      console.log(
+        'Texto intermedio:',
+        textoIntermedio
+      );
+    };
+
+
+    /* -------------------------------------------------------
+       ERROR
+       ------------------------------------------------------- */
+
+    rec.onerror = function(ev) {
+
+      console.log(
+        'SpeechRecognition error:',
+        ev.error
+      );
+
+
+      /*
+        Estos errores pueden ocurrir normalmente
+        durante una conversación continua.
+      */
+
+      if (
+        ev.error === 'no-speech' ||
+        ev.error === 'aborted'
+      ) {
+
+        if (escuchando) {
+
+          $('estado').textContent =
+            'Sigo escuchando...';
+
+        }
+
+        return;
+      }
+
+
+      /*
+        Error de red del reconocimiento.
+      */
+
+      if (ev.error === 'network') {
+
+        $('estado').textContent =
+          'Problema de conexión del micrófono. Reintentando...';
+
+        return;
+      }
+
+
+      $('estado').textContent =
+        'Error de micrófono: ' + ev.error;
+    };
+
+
+    /* -------------------------------------------------------
+       CUANDO CHROME DETIENE EL RECONOCIMIENTO
+       ------------------------------------------------------- */
+
+    rec.onend = function() {
+
+      reconocimientoActivo = false;
+
+
+      /*
+        Si el usuario todavía quiere hablar,
+        reiniciamos automáticamente.
+      */
+
+      if (escuchando) {
+
+        $('estado').textContent =
+          'Continuando escucha...';
+
+        iniciarReconocimiento();
+
       } else {
-        escuchando = false;
-        rec.stop();
+
         $('mic').classList.remove('grabando');
-        $('estado').textContent = 'Grabación pausada. Presiona "Enviar a Leila".';
+
       }
     };
 
-    $('enviar').onclick = function() {
-      if (escuchando) {
-        escuchando = false;
+  }
+
+
+  /* =========================================================
+     BOTÓN DEL MICRÓFONO
+     ========================================================= */
+
+  $('mic').onclick = function() {
+
+    if (!SR) {
+
+      $('estado').textContent =
+        'Este navegador no soporta dictado. Usa Google Chrome.';
+
+      return;
+    }
+
+
+    /* -------------------------------------------------------
+       INICIAR
+       ------------------------------------------------------- */
+
+    if (!escuchando) {
+
+      escuchando = true;
+
+      /*
+        Empezamos un NUEVO dictado.
+
+        Conservamos lo que ya estaba escrito,
+        por si el usuario quiere continuar.
+      */
+
+      textoFinal =
+        $('txt').value.trim();
+
+      textoIntermedio = '';
+
+
+      $('mic').classList.add('grabando');
+
+      $('estado').textContent =
+        'Iniciando micrófono...';
+
+
+      iniciarReconocimiento();
+
+      return;
+    }
+
+
+    /* -------------------------------------------------------
+       DETENER
+       ------------------------------------------------------- */
+
+    escuchando = false;
+
+    textoIntermedio = '';
+
+    $('mic').classList.remove('grabando');
+
+    $('estado').textContent =
+      'Grabación pausada. Presiona "Enviar a Leila".';
+
+
+    if (rec && reconocimientoActivo) {
+
+      try {
+
         rec.stop();
-        $('mic').classList.remove('grabando');
+
+      } catch (e) {
+
+        console.log(
+          'Error al detener reconocimiento:',
+          e
+        );
+
       }
-      enviar($('txt').value);
-    };
-  </script>
+    }
+
+
+    actualizarTexto();
+  };
+
+
+  /* =========================================================
+     ENVIAR A GOOGLE APPS SCRIPT
+     ========================================================= */
+
+  function enviar(texto) {
+
+    var c = conf();
+
+
+    if (!c.u || !c.t) {
+
+      $('estado').textContent =
+        'Falta configurar URL y token.';
+
+      return;
+    }
+
+
+    if (!texto || !texto.trim()) {
+
+      $('estado').textContent =
+        'El texto está vacío.';
+
+      return;
+    }
+
+
+    texto = texto.trim();
+
+
+    $('estado').textContent =
+      'Enviando a Leila...';
+
+    $('resp').textContent = '';
+
+
+    var payload = JSON.stringify({
+
+      token: c.t,
+
+      client_id: 'cliente_001',
+
+      request_id:
+        'web-' + Date.now(),
+
+      source: 'voice',
+
+      text: texto
+
+    });
+
+
+    console.log(
+      'ENVIANDO:',
+      payload
+    );
+
+
+    fetch(c.u, {
+
+      method: 'POST',
+
+      headers: {
+        'Content-Type':
+          'text/plain;charset=utf-8'
+      },
+
+      body: payload
+
+    })
+
+    .then(function(r) {
+
+      console.log(
+        'HTTP STATUS:',
+        r.status
+      );
+
+
+      return r.text()
+        .then(function(raw) {
+
+          console.log(
+            'RESPUESTA RAW:',
+            raw
+          );
+
+
+          if (!r.ok) {
+
+            throw new Error(
+              'HTTP ' +
+              r.status +
+              ': ' +
+              raw
+            );
+          }
+
+
+          try {
+
+            return JSON.parse(raw);
+
+          } catch (e) {
+
+            throw new Error(
+              'La respuesta no es JSON válido: ' +
+              raw
+            );
+
+          }
+
+        });
+
+    })
+
+    .then(function(j) {
+
+      console.log(
+        'RESPUESTA LEILA:',
+        j
+      );
+
+
+      if (j.status === 'ok') {
+
+        $('estado').textContent =
+          'Listo';
+
+      } else {
+
+        $('estado').textContent =
+          'Leila respondió con un detalle.';
+
+      }
+
+
+      var msg =
+        j.spoken ||
+        j.mensaje ||
+        (
+          j.status === 'ok'
+            ? 'Registro completado.'
+            : 'Ocurrió un detalle al procesar la solicitud.'
+        );
+
+
+      $('resp').textContent = msg;
+
+
+      /*
+        Leila responde por voz.
+      */
+
+      hablar(msg);
+
+
+      /*
+        Limpiamos el campo después de enviar.
+      */
+
+      $('txt').value = '';
+
+      textoFinal = '';
+
+      textoIntermedio = '';
+
+    })
+
+    .catch(function(e) {
+
+      console.error(
+        'ERROR ENVIANDO A LEILA:',
+        e
+      );
+
+
+      $('estado').textContent =
+        'Error de conexión.';
+
+
+      $('resp').textContent =
+        'Error: ' + e.message;
+
+    });
+  }
+
+
+  /* =========================================================
+     BOTÓN ENVIAR
+     ========================================================= */
+
+  $('enviar').onclick = function() {
+
+    /*
+      Si todavía está escuchando,
+      detenemos primero el reconocimiento.
+    */
+
+    if (escuchando) {
+
+      escuchando = false;
+
+      textoIntermedio = '';
+
+      $('mic').classList.remove('grabando');
+
+
+      if (rec && reconocimientoActivo) {
+
+        try {
+
+          rec.stop();
+
+        } catch (e) {
+
+          console.log(e);
+
+        }
+
+      }
+    }
+
+
+    /*
+      Tomamos TODO lo que aparece
+      actualmente en el textarea.
+    */
+
+    var texto =
+      $('txt').value.trim();
+
+
+    /*
+      Pequeña espera para que Chrome pueda
+      entregar un último resultado final.
+    */
+
+    setTimeout(function() {
+
+      var textoActual =
+        $('txt').value.trim();
+
+
+      enviar(
+        textoActual || texto
+      );
+
+    }, 300);
+
+  };
+
+
+  /* =========================================================
+     SOPORTE DE TECLA ENTER
+     ========================================================= */
+
+  $('txt').addEventListener(
+    'keydown',
+    function(e) {
+
+      /*
+        Ctrl + Enter = enviar
+      */
+
+      if (
+        e.key === 'Enter' &&
+        e.ctrlKey
+      ) {
+
+        e.preventDefault();
+
+        $('enviar').click();
+
+      }
+
+    }
+  );
+
+
+</script>
+
 </body>
 </html>
